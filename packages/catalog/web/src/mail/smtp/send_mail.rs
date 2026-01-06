@@ -10,7 +10,7 @@ use flow_like_catalog_core::FlowPath;
 use flow_like_types::{anyhow, async_trait, json::json};
 
 use crate::mail::smtp::SmtpConnection;
-use crate::mail::{generate_mail_footer_html, generate_mail_footer_plain};
+// use crate::mail::{generate_mail_footer_html, generate_mail_footer_plain};
 
 #[crate::register_node]
 #[derive(Default)]
@@ -247,9 +247,9 @@ pub fn build_rfc5322_message_send(
             message.push_str(crlf);
             message.push_str(crlf);
             message.push_str(body_text);
-            message.push_str(crlf);
-            message.push_str(crlf);
-            message.push_str(&generate_mail_footer_plain());
+            // message.push_str(crlf);
+            // message.push_str(crlf);
+            // message.push_str(&generate_mail_footer_plain());
             message.push_str(crlf);
         } else {
             let alt_boundary = "----=_FlowLikeBoundary_mpart_alternative_001";
@@ -269,8 +269,8 @@ pub fn build_rfc5322_message_send(
             message.push_str(crlf);
             message.push_str(crlf);
             message.push_str(body_text);
-            message.push_str(crlf);
-            message.push_str(&generate_mail_footer_plain());
+            // message.push_str(crlf);
+            // message.push_str(&generate_mail_footer_plain());
             message.push_str(crlf);
 
             message.push_str(&format!("--{}{}", alt_boundary, crlf));
@@ -280,7 +280,7 @@ pub fn build_rfc5322_message_send(
             message.push_str(crlf);
             message.push_str(crlf);
             message.push_str(body_html);
-            message.push_str(&generate_mail_footer_html());
+            // message.push_str(&generate_mail_footer_html());
             message.push_str(crlf);
 
             message.push_str(&format!("--{}--{}", alt_boundary, crlf));
@@ -304,9 +304,9 @@ pub fn build_rfc5322_message_send(
             message.push_str(crlf);
             message.push_str(crlf);
             message.push_str(body_text);
-            message.push_str(crlf);
-            message.push_str(crlf);
-            message.push_str(&generate_mail_footer_plain());
+            // message.push_str(crlf);
+            // message.push_str(crlf);
+            // message.push_str(&generate_mail_footer_plain());
             message.push_str(crlf);
         } else {
             let alt_boundary = "----=_FlowLikeBoundary_mpart_alternative_001";
@@ -333,7 +333,7 @@ pub fn build_rfc5322_message_send(
             message.push_str(crlf);
             message.push_str(crlf);
             message.push_str(body_html);
-            message.push_str(&generate_mail_footer_html());
+            // message.push_str(&generate_mail_footer_html());
             message.push_str(crlf);
 
             message.push_str(&format!("--{}--{}", alt_boundary, crlf));
