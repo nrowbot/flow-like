@@ -124,3 +124,11 @@ kube = { version = "0.98", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.24", features = ["v1_32"] }
 percent-encoding = "2.3.2"
 
+[profile.dev]
+split-debuginfo = "unpacked"
+
+[patch.crates-io]
+kpi-cli = { path = "../elijah/chariot/crates/kpi-cli" }
+kpi-core = { path = "../elijah/chariot/crates/kpi-core" }
+kpi-platform-growth = { path = "../elijah/chariot/crates/kpi-platform-growth" }
+kpi-report = { path = "../elijah/chariot/crates/kpi-report" }
