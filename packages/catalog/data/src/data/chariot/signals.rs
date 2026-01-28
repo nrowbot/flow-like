@@ -1,3 +1,4 @@
+use crate::data::path::FlowPath;
 use flow_like::{
     flow::{
         execution::{LogLevel, context::ExecutionContext},
@@ -9,10 +10,11 @@ use flow_like::{
 use flow_like_types::{
     Value, async_trait,
     json::{json, to_value},
-    tokio::task,
 };
 use kpi_cli::{gbp, signals};
 use kpi_core::subject::{GbpSignals, SubjectSeed, WebsiteSignals};
+use std::{path::PathBuf, sync::Arc};
+use uuid::Uuid;
 
 #[crate::register_node]
 #[derive(Default)]
@@ -39,6 +41,23 @@ impl NodeLogic for GatherWebsiteSignalsNode {
             VariableType::Struct,
         )
         .set_schema::<SubjectSeed>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
+            "industry",
+            "Industry",
+            "Optional industry key used to resolve industry terms (overrides seed metadata).",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+
+        node.add_input_pin(
+            "industry_terms_path",
+            "Industry Terms YAML",
+            "Optional FlowPath to an industry_terms.yml file in storage.",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
@@ -137,6 +156,19 @@ impl NodeLogic for GatherWebsiteSignalsNode {
             .await
             .unwrap_or(false);
         let skip_sitemap: bool = context.evaluate_pin("skip_sitemap").await.unwrap_or(false);
+        let industry_override: String = context.evaluate_pin("industry").await.unwrap_or_default();
+        let industry_terms_path: Option<FlowPath> =
+            context.evaluate_pin("industry_terms_path").await.ok();
+
+        let industry = resolve_industry(&seed, Some(industry_override));
+        if industry.is_some() && industry_terms_path.is_none() {
+            context.log_message(
+                "Industry specified without an industry_terms.yml path; using embedded defaults.",
+                LogLevel::Warn,
+            );
+        }
+        let industry_terms =
+            resolve_industry_terms(context, industry.as_deref(), industry_terms_path).await?;
 
         let options = signals::WebsiteSignalOptions {
             max_additional_pages: max_additional_pages.max(0) as usize,
@@ -144,6 +176,9 @@ impl NodeLogic for GatherWebsiteSignalsNode {
             request_timeout_secs: request_timeout_secs.max(1) as u64,
             skip_sitemap,
             allow_browser_solve: !disable_browser_solve,
+            request_delay_ms: 0,
+            request_delay_jitter_ms: 0,
+            industry_terms,
         };
 
         let Some(url) = seed
@@ -209,6 +244,23 @@ impl NodeLogic for DiscoverWebsiteCandidatesNode {
             VariableType::Struct,
         )
         .set_schema::<SubjectSeed>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
+            "industry",
+            "Industry",
+            "Optional industry key used to resolve industry terms (overrides seed metadata).",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+
+        node.add_input_pin(
+            "industry_terms_path",
+            "Industry Terms YAML",
+            "Optional FlowPath to an industry_terms.yml file in storage.",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin(
@@ -338,6 +390,19 @@ impl NodeLogic for DiscoverWebsiteCandidatesNode {
             .await
             .unwrap_or(false);
         let skip_sitemap: bool = context.evaluate_pin("skip_sitemap").await.unwrap_or(false);
+        let industry_override: String = context.evaluate_pin("industry").await.unwrap_or_default();
+        let industry_terms_path: Option<FlowPath> =
+            context.evaluate_pin("industry_terms_path").await.ok();
+
+        let industry = resolve_industry(&seed, Some(industry_override));
+        if industry.is_some() && industry_terms_path.is_none() {
+            context.log_message(
+                "Industry specified without an industry_terms.yml path; using embedded defaults.",
+                LogLevel::Warn,
+            );
+        }
+        let industry_terms =
+            resolve_industry_terms(context, industry.as_deref(), industry_terms_path).await?;
 
         let options = signals::WebsiteSignalOptions {
             max_additional_pages: max_additional_pages.max(0) as usize,
@@ -345,6 +410,9 @@ impl NodeLogic for DiscoverWebsiteCandidatesNode {
             request_timeout_secs: request_timeout_secs.max(1) as u64,
             skip_sitemap,
             allow_browser_solve: !disable_browser_solve,
+            request_delay_ms: 0,
+            request_delay_jitter_ms: 0,
+            industry_terms,
         };
 
         let Some(url) = seed
@@ -552,6 +620,23 @@ impl NodeLogic for ParseWebsiteSignalsNode {
         .set_default_value(Some(json!(false)));
 
         node.add_input_pin(
+            "industry",
+            "Industry",
+            "Optional industry key used to resolve industry terms.",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+
+        node.add_input_pin(
+            "industry_terms_path",
+            "Industry Terms YAML",
+            "Optional FlowPath to an industry_terms.yml file in storage.",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
             "normalized_url",
             "Normalized URL",
             "Normalized root URL for the subject website.",
@@ -638,6 +723,18 @@ impl NodeLogic for ParseWebsiteSignalsNode {
             .evaluate_pin("sitemap_present")
             .await
             .unwrap_or(None);
+        let industry_override: String = context.evaluate_pin("industry").await.unwrap_or_default();
+        let industry_terms_path: Option<FlowPath> =
+            context.evaluate_pin("industry_terms_path").await.ok();
+        let industry = normalize_industry(Some(industry_override));
+        if industry.is_some() && industry_terms_path.is_none() {
+            context.log_message(
+                "Industry specified without an industry_terms.yml path; using embedded defaults.",
+                LogLevel::Warn,
+            );
+        }
+        let industry_terms =
+            resolve_industry_terms(context, industry.as_deref(), industry_terms_path).await?;
 
         if normalized_url.trim().is_empty() {
             context.log_message("Normalized URL is required.", LogLevel::Error);
@@ -651,12 +748,13 @@ impl NodeLogic for ParseWebsiteSignalsNode {
             Some(homepage_html)
         };
 
-        let signals = match signals::parse_website_signals_from_pages(
+        let signals = match signals::parse_website_signals_from_pages_with_terms(
             normalized_url.as_str(),
             homepage_html,
             &extra_pages_html,
             robots_txt_present,
             sitemap_present,
+            industry_terms.as_ref(),
             debug,
         ) {
             Ok(value) => value,
@@ -759,4 +857,48 @@ impl NodeLogic for GatherGbpSignalsNode {
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+}
+
+fn normalize_industry(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn industry_from_seed(seed: &SubjectSeed) -> Option<String> {
+    match seed.metadata.get("industry") {
+        Some(Value::String(value)) => normalize_industry(Some(value.clone())),
+        _ => None,
+    }
+}
+
+fn resolve_industry(seed: &SubjectSeed, override_value: Option<String>) -> Option<String> {
+    normalize_industry(override_value).or_else(|| industry_from_seed(seed))
+}
+
+async fn resolve_industry_terms(
+    context: &mut ExecutionContext,
+    industry: Option<&str>,
+    industry_terms_path: Option<FlowPath>,
+) -> flow_like_types::Result<Arc<signals::IndustryTerms>> {
+    let Some(flow_path) = industry_terms_path else {
+        return Ok(Arc::new(signals::default_industry_terms()));
+    };
+
+    let bytes = flow_path.get(context, false).await?;
+    if bytes.is_empty() {
+        return Err(flow_like_types::anyhow!(
+            "Industry terms file is empty."
+        ));
+    }
+
+    let tmp_dir = std::env::temp_dir();
+    let filename = format!("chariot-industry-terms-{}.yml", Uuid::new_v4());
+    let tmp_path = tmp_dir.join(PathBuf::from(filename));
+    std::fs::write(&tmp_path, &bytes)?;
+
+    let terms_result = signals::load_industry_terms(industry, Some(tmp_path.as_path()))
+        .map_err(|err| flow_like_types::anyhow!("Failed to load industry terms: {err}"));
+    let _ = std::fs::remove_file(&tmp_path);
+    terms_result
 }

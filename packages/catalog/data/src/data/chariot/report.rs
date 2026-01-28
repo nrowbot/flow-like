@@ -11,7 +11,8 @@ use flow_like_types::{
     json::to_value,
 };
 use kpi_core::{kpi::summarize_by_area, subject::SubjectSnapshot};
-use kpi_platform_growth::default_registry;
+use kpi_platform_growth::industry::growth_area_labels;
+use kpi_platform_growth::registry_for_industry;
 use kpi_report::build_report_bundle;
 
 use super::{
@@ -86,8 +87,9 @@ impl NodeLogic for BuildChariotReportNode {
 
         let snapshot: SubjectSnapshot = context.evaluate_pin("snapshot").await?;
         let scores: Vec<FlowNodeKpiResult> = context.evaluate_pin("scores").await?;
+        let industry = industry_from_snapshot(&snapshot);
 
-        let registry = default_registry();
+        let registry = registry_for_industry(industry.as_deref());
         let hydrated = match hydrate_scores(&scores, &registry) {
             Ok(values) => values,
             Err(err) => {
@@ -100,10 +102,27 @@ impl NodeLogic for BuildChariotReportNode {
             }
         };
 
-        let summaries = summarize_by_area(&hydrated);
+        let mut summaries = summarize_by_area(&hydrated);
+        if let Some(industry_key) = industry.as_deref() {
+            let labels = growth_area_labels(Some(industry_key));
+            for summary in &mut summaries {
+                summary.model_area_label = match summary.model_area_key.as_str() {
+                    "G" => labels.get_new.to_string(),
+                    "R" => labels.rally.to_string(),
+                    "O" => labels.obsess.to_string(),
+                    "W" => labels.work.to_string(),
+                    "T" => labels.tune.to_string(),
+                    "H" => labels.harvest.to_string(),
+                    _ => summary.model_area_label.clone(),
+                };
+            }
+        }
         let bundle = build_report_bundle(&snapshot, &hydrated, &summaries);
         let plain_scores: Vec<FlowPlainKpiScore> =
-            hydrated.iter().map(FlowPlainKpiScore::from).collect();
+            hydrated
+                .iter()
+                .map(|score| FlowPlainKpiScore::from_score_with_industry(score, industry.as_deref()))
+                .collect();
 
         let output = FlowReportOutput {
             bundle,
@@ -114,5 +133,19 @@ impl NodeLogic for BuildChariotReportNode {
         context.set_pin_value("report", to_value(&output)?).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+}
+
+fn industry_from_snapshot(snapshot: &SubjectSnapshot) -> Option<String> {
+    match snapshot.seed.metadata.get("industry") {
+        Some(flow_like_types::Value::String(value)) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        _ => None,
     }
 }

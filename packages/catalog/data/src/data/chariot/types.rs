@@ -2,6 +2,7 @@ use kpi_core::{
     kpi::{CategorySummary, KpiMetadata, KpiScore, KpiStatus},
     subject::SubjectSnapshot,
 };
+use kpi_platform_growth::industry::{apply_industry_text, display_kpi_metadata};
 use kpi_report::ReportBundle;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -63,6 +64,31 @@ impl From<&KpiScore> for FlowPlainKpiScore {
     }
 }
 
+impl FlowPlainKpiScore {
+    pub fn from_score_with_industry(score: &KpiScore, industry: Option<&str>) -> Self {
+        let display = display_kpi_metadata(score.meta, industry);
+        let notes = score
+            .notes
+            .as_deref()
+            .map(|value| apply_industry_text(industry, value));
+
+        Self {
+            id: score.meta.id.to_string(),
+            model_area_key: score.meta.model_area_key.to_string(),
+            model_area_label: display.model_area_label,
+            category_label: display.category_label,
+            profit_driver: display.profit_driver,
+            name: display.name,
+            description: display.description,
+            group_label: score.meta.group_label.to_string(),
+            manual_verification_hint: display.manual_verification_hint,
+            score: score.score,
+            status: score.status,
+            notes,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct FlowReportOutput {
     pub bundle: ReportBundle,
@@ -95,6 +121,23 @@ impl From<&'static KpiMetadata> for FlowKpiMetadata {
             description: meta.description.to_string(),
             group_label: meta.group_label.to_string(),
             manual_verification_hint: meta.manual_verification_hint.to_string(),
+        }
+    }
+}
+
+impl FlowKpiMetadata {
+    pub fn from_meta(meta: &'static KpiMetadata, industry: Option<&str>) -> Self {
+        let display = display_kpi_metadata(meta, industry);
+        Self {
+            id: meta.id.to_string(),
+            model_area_key: meta.model_area_key.to_string(),
+            model_area_label: display.model_area_label,
+            category_label: display.category_label,
+            profit_driver: display.profit_driver,
+            name: display.name,
+            description: display.description,
+            group_label: meta.group_label.to_string(),
+            manual_verification_hint: display.manual_verification_hint,
         }
     }
 }

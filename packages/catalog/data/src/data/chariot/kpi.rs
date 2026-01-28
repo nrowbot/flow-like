@@ -16,7 +16,7 @@ use kpi_core::{
     kpi::{KpiEvaluator, KpiRegistry, KpiScore},
     subject::{SubjectContext, SubjectSnapshot},
 };
-use kpi_platform_growth::default_registry;
+use kpi_platform_growth::registry_for_industry;
 
 use super::types::{FlowKpiMetadata, FlowNodeKpiResult};
 
@@ -53,15 +53,24 @@ impl NodeLogic for ListChariotKpisNode {
         .set_schema::<Vec<FlowKpiMetadata>>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
+        node.add_input_pin(
+            "industry",
+            "Industry",
+            "Optional industry key to filter/label KPIs.",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+
         node
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
-        let registry = default_registry();
+        let industry = normalize_industry(context.evaluate_pin("industry").await.unwrap_or_default());
+        let registry = registry_for_industry(industry.as_deref());
         let metadata: Vec<FlowKpiMetadata> = registry
             .iter()
-            .map(|kpi| FlowKpiMetadata::from(kpi.metadata()))
+            .map(|kpi| FlowKpiMetadata::from_meta(kpi.metadata(), industry.as_deref()))
             .collect();
         context.set_pin_value("kpis", json!(metadata)).await?;
         context.activate_exec_pin("exec_out").await?;
@@ -94,6 +103,14 @@ impl NodeLogic for EvaluateChariotKpiNode {
         )
         .set_schema::<SubjectSnapshot>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin(
+            "industry",
+            "Industry",
+            "Optional industry key to select the KPI registry (overrides snapshot metadata).",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
 
         node.add_input_pin(
             "kpi_id",
@@ -133,6 +150,8 @@ impl NodeLogic for EvaluateChariotKpiNode {
 
         let snapshot: SubjectSnapshot = context.evaluate_pin("snapshot").await?;
         let kpi_id: String = context.evaluate_pin("kpi_id").await?;
+        let industry_override: String = context.evaluate_pin("industry").await.unwrap_or_default();
+        let industry = resolve_industry(&snapshot, Some(industry_override));
 
         if kpi_id.trim().is_empty() {
             context.log_message("KPI ID cannot be empty.", LogLevel::Error);
@@ -140,7 +159,7 @@ impl NodeLogic for EvaluateChariotKpiNode {
             return Ok(());
         }
 
-        let registry = default_registry();
+        let registry = registry_for_industry(industry.as_deref());
         let Some(kpi) = find_kpi(&registry, &kpi_id) else {
             context.log_message(
                 &format!("Unknown KPI id requested: {}", kpi_id),
@@ -194,4 +213,24 @@ fn find_kpi<'a>(
     id: &str,
 ) -> Option<&'a &'static dyn KpiEvaluator> {
     registry.iter().find(|kpi| kpi.metadata().id == id)
+}
+
+fn normalize_industry(value: String) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn industry_from_snapshot(snapshot: &SubjectSnapshot) -> Option<String> {
+    match snapshot.seed.metadata.get("industry") {
+        Some(flow_like_types::Value::String(value)) => normalize_industry(value.clone()),
+        _ => None,
+    }
+}
+
+fn resolve_industry(snapshot: &SubjectSnapshot, override_value: Option<String>) -> Option<String> {
+    override_value.and_then(normalize_industry).or_else(|| industry_from_snapshot(snapshot))
 }
