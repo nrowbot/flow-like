@@ -352,8 +352,8 @@ impl NodeLogic for DiscoverWebsiteCandidatesNode {
             "Whether robots.txt was detected (null when unknown).",
             VariableType::Struct,
         )
-        .set_schema::<Option<bool>>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        .set_schema::<bool>()
+        .set_options(PinOptions::new().set_enforce_schema(false).build());
 
         node.add_output_pin(
             "sitemap_present",
@@ -361,8 +361,8 @@ impl NodeLogic for DiscoverWebsiteCandidatesNode {
             "Whether a sitemap was detected (null when unknown).",
             VariableType::Struct,
         )
-        .set_schema::<Option<bool>>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        .set_schema::<bool>()
+        .set_options(PinOptions::new().set_enforce_schema(false).build());
 
         node
     }
@@ -667,8 +667,8 @@ impl NodeLogic for ParseWebsiteSignalsNode {
             "Whether robots.txt was detected (null when unknown).",
             VariableType::Struct,
         )
-        .set_schema::<Option<bool>>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        .set_schema::<bool>()
+        .set_options(PinOptions::new().set_enforce_schema(false).build());
 
         node.add_input_pin(
             "sitemap_present",
@@ -676,8 +676,8 @@ impl NodeLogic for ParseWebsiteSignalsNode {
             "Whether a sitemap was detected (null when unknown).",
             VariableType::Struct,
         )
-        .set_schema::<Option<bool>>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        .set_schema::<bool>()
+        .set_options(PinOptions::new().set_enforce_schema(false).build());
 
         node.add_output_pin(
             "exec_out",
@@ -827,8 +827,8 @@ impl NodeLogic for GatherGbpSignalsNode {
             "Optional GBP signal payload; Null indicates no listing was found or API disabled.",
             VariableType::Struct,
         )
-        .set_schema::<Option<GbpSignals>>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        .set_schema::<GbpSignals>()
+        .set_options(PinOptions::new().set_enforce_schema(false).build());
 
         node
     }

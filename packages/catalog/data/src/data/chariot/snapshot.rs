@@ -6,7 +6,7 @@ use flow_like::{
         variable::VariableType,
     },
 };
-use flow_like_types::{async_trait, json::to_value, Value as JsonValue};
+use flow_like_types::{async_trait, json::{from_value, to_value}, Value as JsonValue};
 use kpi_core::subject::{GbpSignals, SubjectSeed, SubjectSnapshot, WebsiteSignals};
 
 #[crate::register_node]
@@ -41,8 +41,8 @@ impl NodeLogic for MergeSnapshotNode {
             "Optional WebsiteSignals payload from the crawler.",
             VariableType::Struct,
         )
-        .set_schema::<Option<WebsiteSignals>>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build())
+        .set_schema::<WebsiteSignals>()
+        .set_options(PinOptions::new().set_enforce_schema(false).build())
         .set_default_value(Some(JsonValue::Null));
 
         node.add_input_pin(
@@ -51,8 +51,8 @@ impl NodeLogic for MergeSnapshotNode {
             "Optional GbpSignals payload from the GBP lookup.",
             VariableType::Struct,
         )
-        .set_schema::<Option<GbpSignals>>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build())
+        .set_schema::<GbpSignals>()
+        .set_options(PinOptions::new().set_enforce_schema(false).build())
         .set_default_value(Some(JsonValue::Null));
 
         node.add_output_pin(
@@ -78,15 +78,29 @@ impl NodeLogic for MergeSnapshotNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let seed: SubjectSeed = context.evaluate_pin("seed").await?;
-        let website_signals: Option<Option<WebsiteSignals>> =
-            context.evaluate_pin("website_signals").await.ok();
-        let gbp_signals: Option<Option<GbpSignals>> =
-            context.evaluate_pin("gbp_signals").await.ok();
+        let website_signals_value: JsonValue = context
+            .evaluate_pin("website_signals")
+            .await
+            .unwrap_or(JsonValue::Null);
+        let gbp_signals_value: JsonValue = context
+            .evaluate_pin("gbp_signals")
+            .await
+            .unwrap_or(JsonValue::Null);
+        let website_signals = if website_signals_value.is_null() {
+            None
+        } else {
+            Some(from_value(website_signals_value)?)
+        };
+        let gbp_signals = if gbp_signals_value.is_null() {
+            None
+        } else {
+            Some(from_value(gbp_signals_value)?)
+        };
 
         let snapshot = SubjectSnapshot {
             seed,
-            website_signals: website_signals.flatten(),
-            gbp_signals: gbp_signals.flatten(),
+            website_signals,
+            gbp_signals,
         };
 
         let value = to_value(&snapshot)?;
