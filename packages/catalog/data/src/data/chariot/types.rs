@@ -2,7 +2,7 @@ use kpi_core::{
     kpi::{CategorySummary, KpiMetadata, KpiScore, KpiStatus},
     subject::SubjectSnapshot,
 };
-use kpi_platform_growth::industry::{apply_industry_text, display_kpi_metadata};
+use kpi_platform_growth::industry::display_kpi_metadata;
 use kpi_report::ReportBundle;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -67,10 +67,7 @@ impl From<&KpiScore> for FlowPlainKpiScore {
 impl FlowPlainKpiScore {
     pub fn from_score_with_industry(score: &KpiScore, industry: Option<&str>) -> Self {
         let display = display_kpi_metadata(score.meta, industry);
-        let notes = score
-            .notes
-            .as_deref()
-            .map(|value| apply_industry_text(industry, value));
+        let notes = score.notes.clone();
 
         Self {
             id: score.meta.id.to_string(),
